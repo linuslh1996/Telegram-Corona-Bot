@@ -12,12 +12,8 @@ from psycopg2.extras import execute_values
 
 class PostgresDatabase:
 
-    def __init__(self, username: str, password: str, host: str, port: str, database: str):
-        self.connection: Connection = psycopg2.connect(user=username,
-                                                       password=password,
-                                                       host=host,
-                                                       port=port,
-                                                       database=database)
+    def __init__(self, database_url: str):
+        self.connection: Connection = psycopg2.connect(database_url)
         self.cursor: Cursor = self.connection.cursor()
 
     def get_table_names(self) -> List[str]:
@@ -95,3 +91,21 @@ def convert_to_type(data: List[Dict], type: Type[T]) -> List[T]:
             setattr(new_instance,variable, entry[variable])
         result.append(new_instance)
     return result
+
+
+
+S = TypeVar('S')
+
+def convert_to_database_entry(data: List[S], table_name: str, postgres_db: PostgresDatabase) -> List[Dict]:
+    column_names: List[str] = postgres_db.get_column_names(table_name)
+    db_entry: List[Dict] = []
+    for entry in data:
+        db_row: Dict = {}
+        instance_variables: List[str] =  list(vars(entry).keys())
+        for column_name in column_names:
+            if column_name not in instance_variables:
+                raise Exception(f"Could not map object to table {table_name}. Column {column_name} not found.")
+            db_row[column_name] = getattr(entry, column_name)
+        db_entry.append(db_row)
+    return db_entry
+
