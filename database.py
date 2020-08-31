@@ -1,4 +1,5 @@
-from typing import List, Dict, Any, Tuple
+import inspect
+from typing import List, Dict, Any, Tuple, TypeVar, Type
 
 import psycopg2
 from psycopg2.extensions import cursor as Cursor
@@ -6,6 +7,7 @@ from psycopg2.extensions import connection as Connection
 
 from psycopg2.sql import SQL, Identifier, Composable, Literal
 from psycopg2.extras import execute_values
+
 
 
 class PostgresDatabase:
@@ -73,3 +75,23 @@ class PostgresDatabase:
             .format(table_name=Literal(table_name))
         results: List[Dict] = self.get(sql)
         return [result["attname"] for result in results]
+
+
+T = TypeVar('T')
+
+def convert_to_type(data: List[Dict], type: Type[T]) -> List[T]:
+    # Get Info On Type
+    constructor_arguments: List = list(inspect.signature(type.__init__).parameters.keys())
+    arguments: Dict = {key: None for key in constructor_arguments if not key == "self"}
+    empty_instance: T = type(**arguments)
+    instance_variables: List[str] = list(vars(empty_instance).keys())
+    # Recreate Type
+    result: List[T] = []
+    for entry in data:
+        new_instance: T = type(**arguments)
+        for variable in instance_variables:
+            if not variable in entry.keys():
+                raise Exception(f"Could not find a value for {variable}")
+            setattr(new_instance,variable, entry[variable])
+        result.append(new_instance)
+    return result
