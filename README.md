@@ -4,6 +4,8 @@ Why another Corona-Bot? Basically the reason is that it provides an easy access 
 
 This is where the bot comes into play. It requests the data via API and periodically inserts it into a database. This makes the bot very fast, and it can provide meaningful updates at any time of the day.
 
+![demo](bot.gif)
+
 
 
 
