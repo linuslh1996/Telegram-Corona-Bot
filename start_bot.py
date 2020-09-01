@@ -4,19 +4,16 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, time as Time, timezone
 from typing import Dict, List, Tuple
 
-import sys
 import os
 
 import pytz
 from psycopg2.sql import SQL, Literal
 from telegram import Update
-import helper_functions as help
+from data_modules import helper_functions as help, risklayer
 
-from database import PostgresDatabase, convert_to_type, convert_to_database_entry
+from data_modules.database import PostgresDatabase, convert_to_type, convert_to_database_entry
 from telegram.ext import Updater, Dispatcher, CommandHandler, CallbackContext
-import risklayer
-from risklayer import KreisInformation
-from sched import scheduler
+from data_modules.risklayer import KreisInformation
 import threading
 
 @dataclass
@@ -115,7 +112,6 @@ def start_notifications(update: Update, context: CallbackContext, postgres_db: P
     update.message.reply_text("You will now get a notification each day at 22h")
 
 
-
 def stop_notifications(update: Update, context: CallbackContext):
     db_entry = {"chat_id": update.message.chat_id, "is_active": False}
     postgres_db.upsert("notifications", [db_entry])
@@ -129,6 +125,7 @@ def get_emoji_for_case_numbers(cases_last_week: int, cases_this_week: int) -> st
         return "✅"
     else:
         return "⚠️"
+
 
 def update_data_periodically(database: PostgresDatabase, api_key: str):
     scheduler = sched.scheduler(time.time, time.sleep)

@@ -6,7 +6,7 @@ from typing import List, Dict, Optional
 import requests
 from psycopg2.sql import SQL
 
-from database import PostgresDatabase
+from data_modules.database import PostgresDatabase
 
 
 @dataclass
