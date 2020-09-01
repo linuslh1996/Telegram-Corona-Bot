@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List, Dict, Optional
 
 import requests
+from psycopg2.sql import SQL
 
 from database import PostgresDatabase
 
@@ -40,3 +41,13 @@ def get_new_data(api_key: str) -> List[KreisInformation]:
     # Convert Data
     kreis_infos: List[KreisInformation] = preprocess_raw_data(kreis_names_raw, new_cases_today_raw, contributors_raw, links_raw)
     return kreis_infos
+
+def get_all_kreise(postgres_db: PostgresDatabase) -> List[str]:
+    sql: SQL = SQL("SELECT kreis FROM kreise")
+    results = postgres_db.get(sql)
+    return [result["kreis"] for result in results]
+
+def get_all_bundeslaender(postgres_db: PostgresDatabase) -> List[str]:
+    sql: SQL = SQL("SELECT DISTINCT bundesland FROM kreise")
+    results = postgres_db.get(sql)
+    return [result["bundesland"] for result in results]

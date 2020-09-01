@@ -45,10 +45,11 @@ class PostgresDatabase:
                                                    not column_name.string in primary_keys]
             as_literals: List[Literal] = [Literal(value) for value in values]
             primary_keys_as_identifier = [Identifier(key) for key in primary_keys]
-
+            a = "(" if len(remaining_columns) > 1 else ""
+            b = ")" if len(remaining_columns) > 1 else ""
             sql: Composable = SQL("INSERT INTO {table_name} ({fields}) VALUES ({as_literals}) "
                                   "ON CONFLICT ({primary_keys}) "
-                                  "DO UPDATE SET ({remaining_columns}) = ({remaining_values})") \
+                                  "DO UPDATE SET" + a + "{remaining_columns}" + b + " = " + a + "{remaining_values}" + b) \
                 .format(table_name=Identifier(table_name), fields=SQL(",").join(column_names), as_literals=SQL(",").join(as_literals), primary_keys=SQL(",").join(primary_keys_as_identifier),
                         remaining_columns=SQL(",").join(remaining_columns), remaining_values=SQL("EXCLUDED.") + SQL(", EXCLUDED.").join(remaining_columns))
             self.cursor.execute(sql)
