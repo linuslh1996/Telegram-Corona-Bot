@@ -110,13 +110,13 @@ def get_data_for_kreis(update: Update, context: CallbackContext, postgres_db: Po
 def start_notifications(update: Update, context: CallbackContext, postgres_db: PostgresDatabase):
     db_entry = {"chat_id": update.message.chat_id, "is_active": True}
     postgres_db.upsert("notifications", [db_entry])
-    update.message.reply_text("You will now get a notification each day at 22h")
+    update.message.reply_text("You will now get a notification each day at 22h!")
 
 
 def stop_notifications(update: Update, context: CallbackContext):
     db_entry = {"chat_id": update.message.chat_id, "is_active": False}
     postgres_db.upsert("notifications", [db_entry])
-    update.message.reply_text("You succesfully unsubscribed")
+    update.message.reply_text("You succesfully unsubscribed!")
 
 
 def get_emoji_for_case_numbers(cases_last_week: int, cases_this_week: int) -> str:
