@@ -36,6 +36,7 @@ def notify_user(context: CallbackContext, postgres_db: PostgresDatabase):
     message_markdown: str = get_summarized_case_number(postgres_db)
     context.bot.send_message(chat_id=context.job.context, text=message_markdown, parse_mode="MarkdownV2")
 
+
 def get_summarized_case_number(postgres_db: PostgresDatabase) -> str:
     # Define Query
     today: datetime.date = datetime.date(help.get_current_german_time())
@@ -57,9 +58,9 @@ def get_summarized_case_number(postgres_db: PostgresDatabase) -> str:
         info_today: BundeslandInfo = bundesland[0]
         info_last_week: BundeslandInfo = bundesland[1]
         emoji: str = get_emoji_for_case_numbers(int(info_last_week.new_cases), int(info_today.new_cases))
-        bundesland_name: str = help.escape_markdown_unsafe(help.replace_special_characters(info_today.bundesland))
+        bundesland_name: str = help.escape_markdown_chars(create_bundesland_command(info_today.bundesland))
         markdown += f'{emoji} */{bundesland_name}*: {info_today.new_cases} \({info_last_week.new_cases}\) \n'
-    markdown = help.escape_markdown_safe(markdown)
+    markdown = help.escape_unnormal_markdown_chars(markdown)
     return markdown
 
 
@@ -80,10 +81,10 @@ def get_data_for_bundesland(update: Update, context: CallbackContext, postgres_d
     markdown = f"*{bundesland}*:\n"
     for kreis in combined_info:
         emoji: str = get_emoji_for_case_numbers(kreis[1].number_of_new_cases, kreis[0].number_of_new_cases)
-        kreis_name = help.escape_markdown_unsafe(help.replace_special_characters(kreis[0].kreis))
+        kreis_name = help.escape_markdown_chars(create_kreis_command(kreis[0].kreis))
         markdown += f"{emoji} */{kreis_name}*: " \
                     f"{kreis[0].number_of_new_cases} \({kreis[1].number_of_new_cases}\) \n"
-    update.message.reply_markdown_v2(help.escape_markdown_safe(markdown))
+    update.message.reply_markdown_v2(help.escape_unnormal_markdown_chars(markdown))
 
 
 def get_data_for_kreis(update: Update, context: CallbackContext, postgres_db: PostgresDatabase, kreis: str):
@@ -94,7 +95,7 @@ def get_data_for_kreis(update: Update, context: CallbackContext, postgres_db: Po
     result: List[Dict] = postgres_db.get(sql_kreis_cases.format(kreis=Literal(kreis)))
     kreis_cases_history: List[KreisInformation] = convert_to_type(result, KreisInformation)
     # Construct Message
-    markdown = f"*{help.escape_markdown_unsafe(kreis)}*:\n"
+    markdown = f"*{help.escape_markdown_chars(kreis)}*:\n"
     markdown += "*Last Seven Days:* "
     for kreis_history in kreis_cases_history[1:8]:
         markdown += f"{kreis_history.number_of_new_cases}-"
@@ -102,8 +103,8 @@ def get_data_for_kreis(update: Update, context: CallbackContext, postgres_db: Po
     markdown += "\n"
     markdown += "*Average*: "
     markdown += f"{round(sum([kreis.number_of_new_cases for kreis in kreis_cases_history[1:8]])/7, 2)} \n"
-    markdown += f"*Link:* [{help.escape_markdown_unsafe(kreis_cases_history[0].kreis)}]({help.escape_markdown_unsafe(kreis_cases_history[0].link)})"
-    update.message.reply_markdown_v2(help.escape_markdown_safe(markdown))
+    markdown += f"*Link:* [{help.escape_markdown_chars(kreis_cases_history[0].kreis)}]({help.escape_markdown_chars(kreis_cases_history[0].link)})"
+    update.message.reply_markdown_v2(help.escape_unnormal_markdown_chars(markdown))
 
 
 def start_notifications(update: Update, context: CallbackContext, postgres_db: PostgresDatabase):
@@ -149,6 +150,18 @@ def get_users_to_notifiy(postgres_db: PostgresDatabase) -> List[str]:
     chat_info: List[ChatInfo] = convert_to_type(postgres_db.get(sql), ChatInfo)
     return [info.chat_id for info in chat_info]
 
+def create_bundesland_command(bundesland_unformatted: str) -> str:
+    without_special_characters: str = help.replace_special_characters(bundesland_unformatted)
+    return without_special_characters
+
+def create_kreis_command(kreis_unformatted: str) -> str:
+    without_special_characters: str = help.replace_special_characters(kreis_unformatted)
+    if without_special_characters in ["Bremen", "Hamburg", "Berlin"]:
+        without_special_characters += "_K"
+    return without_special_characters
+
+
+
 
 # Load Data
 API_KEY: str = os.environ["API_KEY"]
@@ -161,7 +174,6 @@ update_database_thread.start()
 # Schedule Notifications
 updater: Updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
 for user in get_users_to_notifiy(postgres_db):
-    berlin = pytz.timezone('Europe/Berlin')
     time_where_notifications_get_send: Time = Time(hour=20, tzinfo=timezone.utc)
     updater.job_queue.run_daily(lambda context: notify_user(context, postgres_db),time_where_notifications_get_send, context=user)
 # Register Functions To Dispatcher
@@ -170,15 +182,15 @@ dispatcher.add_handler(CommandHandler("update", lambda update, context: post_sum
 dispatcher.add_handler(CommandHandler("start", lambda update, context: start_notifications(update, context, postgres_db)))
 dispatcher.add_handler(CommandHandler("stop", stop_notifications))
 for bundesland in risklayer.get_all_bundeslaender(postgres_db):
-    name_without_special_characters: str = help.replace_special_characters(bundesland)
+    bundesland_command: str = create_bundesland_command(bundesland)
     callback_function = lambda update, context, bundesland=bundesland: \
         get_data_for_bundesland(update, context, postgres_db, bundesland)
-    dispatcher.add_handler(CommandHandler(name_without_special_characters, callback_function))
+    dispatcher.add_handler(CommandHandler(bundesland_command, callback_function))
 for kreis in risklayer.get_all_kreise(postgres_db):
-    name_without_special_characters: str = help.replace_special_characters(kreis)
+    kreis_command: str = create_kreis_command(kreis)
     callback_function = lambda update, context, kreis=kreis: \
         get_data_for_kreis(update, context, postgres_db, kreis)
-    dispatcher.add_handler(CommandHandler(name_without_special_characters, callback_function))
+    dispatcher.add_handler(CommandHandler(kreis_command, callback_function))
 
 updater.start_polling()
 

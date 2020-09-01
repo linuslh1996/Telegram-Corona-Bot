@@ -18,7 +18,7 @@ def get_current_german_time() -> datetime:
     berlin_now: datetime = datetime.now(tz)
     return berlin_now
 
-def escape_markdown_unsafe(unescaped_markdown: str) -> str:
+def escape_markdown_chars(unescaped_markdown: str) -> str:
     escaped_unsafe: str = unescaped_markdown.replace("(", "\(")
     escaped_unsafe = escaped_unsafe.replace(")", "\)")
     escaped_unsafe = escaped_unsafe.replace("*", "\*")
@@ -26,7 +26,7 @@ def escape_markdown_unsafe(unescaped_markdown: str) -> str:
     escaped_unsafe = escaped_unsafe.replace("%", "\%")
     return escaped_unsafe
 
-def escape_markdown_safe(unescaped_markdown: str) -> str:
+def escape_unnormal_markdown_chars(unescaped_markdown: str) -> str:
     markdown = unescaped_markdown.replace("-", "\-")
     markdown = markdown.replace(".", "\.")
     markdown = markdown.replace("+", "\+")
