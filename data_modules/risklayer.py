@@ -5,6 +5,7 @@ from typing import List, Dict, Optional
 
 import requests
 from psycopg2.sql import SQL
+import data_modules.helper_functions as help
 
 from data_modules.database import PostgresDatabase
 
@@ -51,7 +52,8 @@ def _preprocess_raw_data(kreis_names_raw: List[List[str]], new_cases_today_raw: 
     kreis_names: List[str] = [kreis_name[0] for kreis_name in kreis_names_raw]
     links: List[str] = [link[0] for link in links_raw]
     kreis_is_already_entered: List[bool] = [len(contributor) != 0 for contributor in contributors_raw]
-    kreis_infos: List[KreisInformation] = [KreisInformation(i, name, is_entered, new_cases, link, None, datetime.date(datetime.today()))
+    current_date: datetime.date = datetime.date(help.get_current_german_time())
+    kreis_infos: List[KreisInformation] = [KreisInformation(i, name, is_entered, new_cases, link, None, current_date)
                                            for i, (name, is_entered, new_cases, link) in enumerate(zip(kreis_names, kreis_is_already_entered, new_cases_today, links))]
     return kreis_infos
 
