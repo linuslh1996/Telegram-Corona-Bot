@@ -151,11 +151,11 @@ def get_users_to_notifiy(postgres_db: PostgresDatabase) -> List[str]:
     return [info.chat_id for info in chat_info]
 
 def create_bundesland_command(bundesland_unformatted: str) -> str:
-    without_special_characters: str = help.replace_special_characters(bundesland_unformatted)
+    without_special_characters: str = help.normalise_string(bundesland_unformatted)
     return without_special_characters
 
 def create_kreis_command(kreis_unformatted: str) -> str:
-    without_special_characters: str = help.replace_special_characters(kreis_unformatted)
+    without_special_characters: str = help.normalise_string(kreis_unformatted)
     if without_special_characters in ["Bremen", "Hamburg", "Berlin"]:
         without_special_characters += "_K"
     return without_special_characters

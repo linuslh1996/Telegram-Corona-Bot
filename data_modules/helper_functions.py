@@ -34,8 +34,10 @@ def escape_unnormal_markdown_chars(unescaped_markdown: str) -> str:
     markdown = markdown.replace("=", "\=")
     return markdown
 
-def replace_special_characters(normal_german_string: str) -> str:
+# Needed because Telegram can not handle some characters in its commands
+def normalise_string(normal_german_string: str) -> str:
     without_special_characters: str = normal_german_string.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
-    without_empty_spaces: str = without_special_characters.replace(" ", "_").replace("-", "_").replace("(", "").replace(")", "").replace(".", "")
-    shortened: str = without_empty_spaces[:25]
+    without_empty_spaces: str = without_special_characters.replace(" ", "_").replace("-", "_")
+    without_other_characters = without_empty_spaces.replace("(", "").replace(")", "").replace(".", "")
+    shortened: str = without_other_characters[:25]
     return shortened
