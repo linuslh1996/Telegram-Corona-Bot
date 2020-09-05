@@ -37,14 +37,14 @@ def get_new_data(api_key: str) -> List[KreisInformation]:
 
 def get_all_kreise(postgres_db: PostgresDatabase) -> List[str]:
     sql: SQL = SQL("SELECT kreis FROM kreise")
-    results = postgres_db.get(sql)
-    return [result["kreis"] for result in results]
+    results: List[str] = postgres_db.get(sql).convert_to_primitive_type(str)
+    return results
 
 
 def get_all_bundeslaender(postgres_db: PostgresDatabase) -> List[str]:
     sql: SQL = SQL("SELECT DISTINCT bundesland FROM kreise")
-    results = postgres_db.get(sql)
-    return [result["bundesland"] for result in results]
+    results = postgres_db.get(sql).convert_to_primitive_type(str)
+    return results
 
 
 def _preprocess_raw_data(kreis_names_raw: List[List[str]], new_cases_today_raw: List[List[str]], contributors_raw: List[List[str]], links_raw: List[List[str]]) -> List[KreisInformation]:

@@ -1,8 +1,8 @@
+
 from datetime import datetime
 import logging
 
 import pytz
-
 
 def periodic(scheduler, interval, action, actionargs=()):
     scheduler.enter(interval, 1, periodic,

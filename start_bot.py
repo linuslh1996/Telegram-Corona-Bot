@@ -2,19 +2,21 @@ import sched
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, time as Time, timezone
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 
 import os
 
-import pytz
 from psycopg2.sql import SQL, Literal
 from telegram import Update
 from data_modules import helper_functions as help, risklayer
 
-from data_modules.database import PostgresDatabase, convert_to_type, convert_to_database_entry
+from data_modules.database import PostgresDatabase
 from telegram.ext import Updater, Dispatcher, CommandHandler, CallbackContext
 from data_modules.risklayer import KreisInformation
 import threading
+
+from data_modules.scheme import get_table_metadata
+
 
 @dataclass
 class BundeslandInfo:
@@ -44,17 +46,20 @@ def get_summarized_case_number(postgres_db: PostgresDatabase) -> str:
                                  "WHERE f.date = {date} AND f.kreis_id IN (SELECT kreis_id FROM fallzahlen WHERE date = {today} AND is_already_entered = True)"
                                 "GROUP BY bundesland ORDER BY bundesland")
     # Get Results
-    result: List[Dict] = postgres_db.get(sql_bundesland_cases.format(date=Literal(today - timedelta(days=7)), today=Literal(today)))
-    data_one_week_ago: List[BundeslandInfo] = convert_to_type(result, BundeslandInfo)
-    result: List[Dict] = postgres_db.get(sql_bundesland_cases.format(date=Literal(today), today=Literal(today)))
-    data_today: List[BundeslandInfo] = convert_to_type(result, BundeslandInfo)
+
+    data_one_week_ago: List[BundeslandInfo] = postgres_db\
+        .get(sql_bundesland_cases.format(date=Literal(today - timedelta(days=7)), today=Literal(today)))\
+        .convert_rows_to(BundeslandInfo)
+    data_today: List[BundeslandInfo] = postgres_db\
+        .get(sql_bundesland_cases.format(date=Literal(today), today=Literal(today)))\
+        .convert_rows_to(BundeslandInfo)
     # Combine
     combined_info: List[Tuple[BundeslandInfo, BundeslandInfo]] = list(zip(data_today, data_one_week_ago))
-    sorted_descending: List[Tuple[BundeslandInfo, BundeslandInfo]] = sorted(combined_info, key=lambda info: info[0].new_cases - info[1].new_cases, reverse=True)
+    sorted_desc_by_growth: List[Tuple[BundeslandInfo, BundeslandInfo]] = sorted(combined_info, key=lambda info: info[0].new_cases - info[1].new_cases, reverse=True)
     # Construct And Send Message
     markdown: str = f"Today there are *{sum([data.new_cases for data in data_today])}* new cases so far. For the same districts, there" \
                     f" were *{sum([data.new_cases for data in data_one_week_ago])}* cases last week.\n \n"
-    for bundesland in sorted_descending:
+    for bundesland in sorted_desc_by_growth:
         info_today: BundeslandInfo = bundesland[0]
         info_last_week: BundeslandInfo = bundesland[1]
         emoji: str = get_emoji_for_case_numbers(int(info_last_week.new_cases), int(info_today.new_cases))
@@ -72,10 +77,12 @@ def get_data_for_bundesland(update: Update, context: CallbackContext, postgres_d
                           "                 (SELECT kreis_id FROM fallzahlen WHERE date = {today} AND is_already_entered = True)"
                           " ORDER BY k.kreis")
     # Get Results
-    result: List[Dict] = postgres_db.get(sql_kreis_cases.format(date=Literal(today - timedelta(days=7)), bundesland=Literal(bundesland), today=Literal(today)))
-    data_one_week_ago: List[KreisInformation] = convert_to_type(result, KreisInformation)
-    result: List[Dict] = postgres_db.get(sql_kreis_cases.format(date=Literal(today), bundesland=Literal(bundesland), today=Literal(today)))
-    data_today: List[KreisInformation] = convert_to_type(result, KreisInformation)
+    data_one_week_ago: List[KreisInformation] = postgres_db\
+        .get(sql_kreis_cases.format(date=Literal(today - timedelta(days=7)), bundesland=Literal(bundesland), today=Literal(today)))\
+        .convert_rows_to(KreisInformation)
+    data_today: List[KreisInformation] = postgres_db\
+        .get(sql_kreis_cases.format(date=Literal(today), bundesland=Literal(bundesland), today=Literal(today)))\
+        .convert_rows_to(KreisInformation)
     # Construct Message
     combined_info: List[Tuple[KreisInformation, KreisInformation]] = list(zip(data_today, data_one_week_ago))
     markdown = f"*{bundesland}*:\n"
@@ -92,8 +99,9 @@ def get_data_for_kreis(update: Update, context: CallbackContext, postgres_db: Po
     sql_kreis_cases = SQL("SELECT * FROM fallzahlen f LEFT JOIN kreise k ON f.kreis_id = k.id "
                           "WHERE k.kreis = {kreis} ORDER BY f.date DESC")
     # Get Results
-    result: List[Dict] = postgres_db.get(sql_kreis_cases.format(kreis=Literal(kreis)))
-    kreis_cases_history: List[KreisInformation] = convert_to_type(result, KreisInformation)
+    kreis_cases_history: List[KreisInformation] = postgres_db\
+        .get(sql_kreis_cases.format(kreis=Literal(kreis)))\
+        .convert_rows_to(KreisInformation)
     # Construct Message
     markdown = f"*{help.escape_markdown_chars(kreis)}*:\n"
     markdown += "*Last Seven Days:* "
@@ -136,18 +144,17 @@ def update_data_periodically(database: PostgresDatabase, api_key: str):
 
 
 def update_data(database: PostgresDatabase, api_key: str):
-    print("Updating Values")
+    print(f"Updating Values, date={help.get_current_german_time()}")
     kreis_infos: List[KreisInformation] = risklayer.get_new_data(api_key)
     data_was_resetted: bool = help.get_current_german_time().hour > 18 and sum([kreis.number_of_new_cases for kreis in kreis_infos]) < 100
     if data_was_resetted:
         return
-    as_table_format: List[Dict] = convert_to_database_entry(kreis_infos, "fallzahlen", database)
-    database.upsert("fallzahlen", as_table_format)
+    database.convert_to_db_entry(kreis_infos, "fallzahlen").upsert()
 
 
 def get_users_to_notifiy(postgres_db: PostgresDatabase) -> List[str]:
     sql: SQL = SQL("SELECT * FROM notifications WHERE is_active = True")
-    chat_info: List[ChatInfo] = convert_to_type(postgres_db.get(sql), ChatInfo)
+    chat_info: List[ChatInfo] = postgres_db.get(sql).convert_rows_to(ChatInfo)
     return [info.chat_id for info in chat_info]
 
 def create_bundesland_command(bundesland_unformatted: str) -> str:
@@ -168,6 +175,7 @@ API_KEY: str = os.environ["API_KEY"]
 TELEGRAM_TOKEN: str = os.environ["TELEGRAM_TOKEN"]
 DATABASE_URL: str = os.environ["DATABASE_URL"]
 postgres_db: PostgresDatabase = PostgresDatabase(DATABASE_URL)
+postgres_db.initialize_tables(DATABASE_URL, get_table_metadata())
 # Schedule Updates
 update_database_thread = threading.Thread(target=lambda: update_data_periodically(postgres_db, API_KEY))
 update_database_thread.start()
