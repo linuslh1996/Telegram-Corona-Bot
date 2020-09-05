@@ -146,8 +146,10 @@ def update_data_periodically(database: PostgresDatabase, api_key: str):
 def update_data(database: PostgresDatabase, api_key: str):
     print(f"Updating Values, date={help.get_current_german_time()}")
     kreis_infos: List[KreisInformation] = risklayer.get_new_data(api_key)
+    print(kreis_infos)
     data_was_resetted: bool = help.get_current_german_time().hour > 18 and sum([kreis.number_of_new_cases for kreis in kreis_infos]) < 100
     if data_was_resetted:
+        print("data was resetted")
         return
     database.convert_to_db_entry(kreis_infos, "fallzahlen").upsert()
 
