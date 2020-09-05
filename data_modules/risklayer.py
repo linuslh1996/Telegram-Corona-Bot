@@ -52,8 +52,9 @@ def _preprocess_raw_data(kreis_names_raw: List[List[str]], new_cases_today_raw: 
     kreis_names: List[str] = [kreis_name[0] for kreis_name in kreis_names_raw]
     links: List[str] = [link[0] for link in links_raw]
     kreis_is_already_entered: List[bool] = [len(contributor) != 0 for contributor in contributors_raw]
+    already_entered_in_correct_length = kreis_is_already_entered + [False for remaining in range(len(kreis_is_already_entered), 401)] # Google has a really weird (imo awful) way of returning values. If you request the value for 400 row, and the last 200 rows are empty, google will only return the first 200 rows.
     current_date: datetime.date = datetime.date(help.get_current_german_time())
     kreis_infos: List[KreisInformation] = [KreisInformation(i, name, is_entered, new_cases, link, None, current_date)
-                                           for i, (name, is_entered, new_cases, link) in enumerate(zip(kreis_names, kreis_is_already_entered, new_cases_today, links))]
+                                           for i, (name, is_entered, new_cases, link) in enumerate(zip(kreis_names, already_entered_in_correct_length, new_cases_today, links))]
     return kreis_infos
 
