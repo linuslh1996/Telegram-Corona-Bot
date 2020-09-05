@@ -11,7 +11,10 @@ This is where the bot comes into play. It requests the data via API and periodic
 
 ## How to start
 First, install the dependencies via `pip install -r requirements.txt`. 
-Before the bot can be started, you need to create a postgres database, a telegram bot, and a google account first. Then you need to supply the resepective credentials as environment variables (see the `start_bot.py` script). The database scheme will be generated automatically. However, you need to initialize the `kreise` table by yourself, by uploading the csv `kreise_table.csv` to it (this table contains data about id and bundesland of each kreis) (sorry for the mismatch of German and English, but I find the German domain names more intuitive :D). After this table is initialized, the bot can be started with the `start_bot.py` script. The main functions of the bot only work after it has collected one week worth of data, since it always compares the result for the current day with the result of the day the week before.
+
+Before the bot can be started, you need to create a postgres database, a telegram bot, and a google account first. Then you need to supply the resepective credentials as environment variables (see the `start_bot.py` script). 
+
+The database scheme will be generated automatically. However, you need to initialize the `kreise` table by yourself, by uploading the csv `kreise_table.csv` to it (this table contains data about id and bundesland of each kreis) (sorry for the mismatch of German and English, but I find the German domain names more intuitive :D). After this table is initialized, the bot can be started with the `start_bot.py` script. The main functions of the bot only work after it has collected one week worth of data, since it always compares the result for the current day with the result of the day the week before.
 
 
 
