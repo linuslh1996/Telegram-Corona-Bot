@@ -80,36 +80,42 @@ class DbResult:
 
 # Database
 
+# This class is not thread-safe, mostly because the cursor is an instance variable. When the app has a lot of users,
+# this is a problem, since the results can be corrupted from requests at the same time. For now it is fine however.
+# Anyways, the easiest solution for this problem would be to create a new instance of this class per thread.
 
 class PostgresDatabase:
 
     def __init__(self, database_url: str):
-        self.connection: Connection = psycopg2.connect(database_url)
-        self.cursor: Cursor = self.connection.cursor()
+        self._connection: Connection = psycopg2.connect(database_url)
+        self._cursor: Cursor = self._connection.cursor()
 
     def initialize_tables(self, database_url: str, base:DeclarativeMeta):
         engine = create_engine(database_url)
         base.metadata.create_all(engine)
 
     def get_table_names(self) -> List[str]:
-        self.cursor.execute("""SELECT table_name FROM information_schema.tables
+        self._cursor.execute("""SELECT table_name FROM information_schema.tables
            WHERE table_schema = 'public'""")
-        tables: List[str] = self.cursor.fetchall()
+        tables: List[str] = self._cursor.fetchall()
         return tables
 
     def get_column_names(self, table_name: str) -> List[str]:
-        self.cursor.execute(SQL("SELECT * FROM {}").format(Identifier(table_name)))
-        columnnames: List[str] = [desc[0] for desc in self.cursor.description]
+        self._cursor.execute(SQL("SELECT * FROM {}").format(Identifier(table_name)))
+        columnnames: List[str] = [desc[0] for desc in self._cursor.description]
         return columnnames
+
+    def execute(self, sql: Composable):
+        self._cursor.execute(sql)
 
     def insert(self, table_name: str, data: List[Dict[str, Any]]):
         keys: List[str] = list(data[0].keys())
         as_identifiers: List[Identifier] = [Identifier(key) for key in keys]
         values = [list(entry.values()) for entry in data]
-        execute_values(self.cursor, SQL("INSERT INTO {table_name} ({fields}) VALUES %s") \
+        execute_values(self._cursor, SQL("INSERT INTO {table_name} ({fields}) VALUES %s") \
                        .format(table_name=Identifier(table_name), fields=SQL(",").join(as_identifiers)),
                        values)
-        self.connection.commit()
+        self._connection.commit()
 
     def upsert(self, table_name: str, data: List[Dict]):
         primary_keys: List[str] = self._get_primary_keys(table_name)
@@ -127,13 +133,13 @@ class PostgresDatabase:
                                   "DO UPDATE SET" + a + "{remaining_columns}" + b + " = " + a + "{remaining_values}" + b) \
                 .format(table_name=Identifier(table_name), fields=SQL(",").join(column_names), as_literals=SQL(",").join(as_literals), primary_keys=SQL(",").join(primary_keys_as_identifier),
                         remaining_columns=SQL(",").join(remaining_columns), remaining_values=SQL("EXCLUDED.") + SQL(", EXCLUDED.").join(remaining_columns))
-            self.cursor.execute(sql)
-        self.connection.commit()
+            self._cursor.execute(sql)
+        self._connection.commit()
 
     def get(self, sql: Composable) -> DbResult:
-        self.cursor.execute(sql)
-        results_raw: List[Tuple] = self.cursor.fetchall()
-        columnnames: List[str] = [desc[0] for desc in self.cursor.description]
+        self._cursor.execute(sql)
+        results_raw: List[Tuple] = self._cursor.fetchall()
+        columnnames: List[str] = [desc[0] for desc in self._cursor.description]
         results: List[Dict] = []
         for result in results_raw:
             entry: Dict = dict(zip(columnnames, result))

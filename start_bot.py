@@ -6,9 +6,9 @@ from typing import List, Tuple
 
 import os
 
-from psycopg2.sql import SQL, Literal
+from psycopg2.sql import SQL, Literal, Composed
 from telegram import Update
-from data_modules import helper_functions as help, risklayer
+from data_modules import helper_functions as help, risklayer, sql
 
 from data_modules.database import PostgresDatabase
 from telegram.ext import Updater, Dispatcher, CommandHandler, CallbackContext
@@ -40,18 +40,16 @@ def notify_user(context: CallbackContext, postgres_db: PostgresDatabase):
 
 
 def get_summarized_case_number(postgres_db: PostgresDatabase) -> str:
-    # Define Query
+    # Prepare Query
     today: datetime.date = datetime.date(help.get_current_german_time())
-    sql_bundesland_cases = SQL("SELECT SUM(number_of_new_cases) AS new_cases, bundesland  FROM fallzahlen f LEFT JOIN kreise k ON f.kreis_id = k.id "
-                                 "WHERE f.date = {date} AND f.kreis_id IN (SELECT kreis_id FROM fallzahlen WHERE date = {today} AND is_already_entered = True)"
-                                "GROUP BY bundesland ORDER BY bundesland")
+    sql_to_get_data_of_last_week: Composed = sql.get_bundesland_cases_on_date(today - timedelta(days=7), today)
+    sql_to_get_data_of_today: Composed = sql.get_bundesland_cases_on_date(today, today)
     # Get Results
-
     data_one_week_ago: List[BundeslandInfo] = postgres_db\
-        .get(sql_bundesland_cases.format(date=Literal(today - timedelta(days=7)), today=Literal(today)))\
+        .get(sql_to_get_data_of_last_week)\
         .convert_rows_to(BundeslandInfo)
     data_today: List[BundeslandInfo] = postgres_db\
-        .get(sql_bundesland_cases.format(date=Literal(today), today=Literal(today)))\
+        .get(sql_to_get_data_of_today)\
         .convert_rows_to(BundeslandInfo)
     # Combine
     combined_info: List[Tuple[BundeslandInfo, BundeslandInfo]] = list(zip(data_today, data_one_week_ago))
@@ -72,16 +70,14 @@ def get_summarized_case_number(postgres_db: PostgresDatabase) -> str:
 def get_data_for_bundesland(update: Update, context: CallbackContext, postgres_db: PostgresDatabase, bundesland: str):
     # Define Query
     today: datetime.date = datetime.date(help.get_current_german_time())
-    sql_kreis_cases = SQL("SELECT *  FROM fallzahlen f LEFT JOIN kreise k ON f.kreis_id = k.id "
-                                 "WHERE k.bundesland = {bundesland} AND f.date = {date} AND f.kreis_id IN "
-                          "                 (SELECT kreis_id FROM fallzahlen WHERE date = {today} AND is_already_entered = True)"
-                          " ORDER BY k.kreis")
+    sql_kreis_cases_last_week = sql.get_kreiszahlen_of_bundesland(today - timedelta(days=7), today, bundesland)
+    sql_kreis_cases_today = sql.get_kreiszahlen_of_bundesland(today, today, bundesland)
     # Get Results
     data_one_week_ago: List[KreisInformation] = postgres_db\
-        .get(sql_kreis_cases.format(date=Literal(today - timedelta(days=7)), bundesland=Literal(bundesland), today=Literal(today)))\
+        .get(sql_kreis_cases_last_week)\
         .convert_rows_to(KreisInformation)
     data_today: List[KreisInformation] = postgres_db\
-        .get(sql_kreis_cases.format(date=Literal(today), bundesland=Literal(bundesland), today=Literal(today)))\
+        .get(sql_kreis_cases_today)\
         .convert_rows_to(KreisInformation)
     # Construct Message
     combined_info: List[Tuple[KreisInformation, KreisInformation]] = list(zip(data_today, data_one_week_ago))
@@ -96,11 +92,10 @@ def get_data_for_bundesland(update: Update, context: CallbackContext, postgres_d
 
 def get_data_for_kreis(update: Update, context: CallbackContext, postgres_db: PostgresDatabase, kreis: str):
     # Define Query
-    sql_kreis_cases = SQL("SELECT * FROM fallzahlen f LEFT JOIN kreise k ON f.kreis_id = k.id "
-                          "WHERE k.kreis = {kreis} ORDER BY f.date DESC")
+    sql_kreis_cases = sql.get_history_for_kreis(kreis)
     # Get Results
     kreis_cases_history: List[KreisInformation] = postgres_db\
-        .get(sql_kreis_cases.format(kreis=Literal(kreis)))\
+        .get(sql_kreis_cases)\
         .convert_rows_to(KreisInformation)
     # Construct Message
     markdown = f"*{help.escape_markdown_chars(kreis)}*:\n"
@@ -135,13 +130,17 @@ def get_emoji_for_case_numbers(cases_last_week: int, cases_this_week: int) -> st
     else:
         return "⚠️"
 
-
 def update_data_periodically(database: PostgresDatabase, api_key: str):
     scheduler = sched.scheduler(time.time, time.sleep)
     seconds_to_wait: int = 600
     help.periodic(scheduler, seconds_to_wait, lambda: update_data(database, api_key))
     scheduler.run()
 
+def delete_data_periodically(database: PostgresDatabase):
+    scheduler = sched.scheduler(time.time, time.sleep)
+    seconds_in_one_day: int = 86400
+    help.periodic(scheduler, seconds_in_one_day, lambda: delete_data(database))
+    scheduler.run()
 
 def update_data(database: PostgresDatabase, api_key: str):
     print(f"Updating Values, date={help.get_current_german_time()}")
@@ -152,6 +151,10 @@ def update_data(database: PostgresDatabase, api_key: str):
         return
     database.convert_to_db_entry(kreis_infos, "fallzahlen").upsert()
 
+def delete_data(database: PostgresDatabase):
+    date_to_delete_everything_before: datetime.date = help.get_current_german_time() - timedelta(days=14)
+    sql_to_delete_fallzahlen: Composed = sql.delete_all_from_before(date_to_delete_everything_before)
+    database.execute(sql_to_delete_fallzahlen)
 
 def get_users_to_notifiy(postgres_db: PostgresDatabase) -> List[str]:
     sql: SQL = SQL("SELECT * FROM notifications WHERE is_active = True")
@@ -177,14 +180,19 @@ TELEGRAM_TOKEN: str = os.environ["TELEGRAM_TOKEN"]
 DATABASE_URL: str = os.environ["DATABASE_URL"]
 postgres_db: PostgresDatabase = PostgresDatabase(DATABASE_URL)
 postgres_db.initialize_tables(DATABASE_URL, get_table_metadata())
-# Schedule Updates
+
+# Schedule Updates and Deletes (Deletes are neccessary for Heroku)
 update_database_thread = threading.Thread(target=lambda: update_data_periodically(postgres_db, API_KEY))
 update_database_thread.start()
+delete_database_thread = threading.Thread(target=lambda: delete_data_periodically(postgres_db))
+delete_database_thread.start()
+
 # Schedule Notifications
 updater: Updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
 for user in get_users_to_notifiy(postgres_db):
     time_where_notifications_get_send: Time = Time(hour=20, tzinfo=timezone.utc)
     updater.job_queue.run_daily(lambda context: notify_user(context, postgres_db),time_where_notifications_get_send, context=user)
+
 # Register Functions To Dispatcher
 dispatcher: Dispatcher = updater.dispatcher
 dispatcher.add_handler(CommandHandler("update", lambda update, context: post_summary(update, context, postgres_db)))
