@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, ForeignKey, String, Date, Boolean
+from sqlalchemy import Column, Integer, ForeignKey, String, Date, Boolean, MetaData
 from sqlalchemy.ext.declarative import declarative_base, DeclarativeMeta
 
 Base = declarative_base()
@@ -10,6 +10,7 @@ class Kreis(Base):
     id = Column(Integer, primary_key=True)
     bundesland = Column(String)
     kreis = Column(String)
+    population = Column(Integer)
 
 class Fallzahl(Base):
     __tablename__ = "fallzahlen"
@@ -26,8 +27,8 @@ class Notification(Base):
     chat_id = Column(Integer, primary_key=True)
     is_active = Column(Boolean)
 
-def get_table_metadata() -> DeclarativeMeta:
-    return Base
+def get_table_metadata() -> MetaData:
+    return Base.metadata
 
 
 

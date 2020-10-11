@@ -15,7 +15,7 @@ from telegram.ext import Updater, Dispatcher, CommandHandler, CallbackContext
 from data_modules.risklayer import KreisInformation
 import threading
 
-from data_modules.scheme import get_table_metadata
+from data_modules.scheme import *
 
 
 @dataclass
@@ -44,6 +44,8 @@ def get_summarized_case_number(postgres_db: PostgresDatabase) -> str:
     today: datetime.date = datetime.date(help.get_current_german_time())
     sql_to_get_data_of_last_week: Composed = sql.get_bundesland_cases_on_date(today - timedelta(days=7), today)
     sql_to_get_data_of_today: Composed = sql.get_bundesland_cases_on_date(today, today)
+    sql_to_get_cases_of_last_week: Composed = sql.get_case_number_on_data(today - timedelta(days=7))
+
     # Get Results
     data_one_week_ago: List[BundeslandInfo] = postgres_db\
         .get(sql_to_get_data_of_last_week)\
@@ -51,12 +53,20 @@ def get_summarized_case_number(postgres_db: PostgresDatabase) -> str:
     data_today: List[BundeslandInfo] = postgres_db\
         .get(sql_to_get_data_of_today)\
         .convert_rows_to(BundeslandInfo)
+    cases_one_week_ago: int = postgres_db\
+        .get(sql_to_get_cases_of_last_week)\
+        .convert_to_primitive_type(int)[0]
+
     # Combine
     combined_info: List[Tuple[BundeslandInfo, BundeslandInfo]] = list(zip(data_today, data_one_week_ago))
     sorted_desc_by_growth: List[Tuple[BundeslandInfo, BundeslandInfo]] = sorted(combined_info, key=lambda info: info[0].new_cases - info[1].new_cases, reverse=True)
-    # Construct And Send Message
-    markdown: str = f"Today there are *{sum([data.new_cases for data in data_today])}* new cases so far. For the same districts, there" \
-                    f" were *{sum([data.new_cases for data in data_one_week_ago])}* cases last week.\n \n"
+
+    # Construct Message
+    cases_today_so_far: int = sum([data.new_cases for data in data_today])
+    cases_last_week_same_districts: int = sum([data.new_cases for data in data_one_week_ago])
+    markdown: str = f"Today there are *{cases_today_so_far}* new cases so far. For the same districts, there" \
+                    f" were *{cases_last_week_same_districts}* cases last week. " \
+                    f"Prognosis for today: *{round(cases_today_so_far/cases_last_week_same_districts * cases_one_week_ago, 0)}* cases \n \n"
     for bundesland in sorted_desc_by_growth:
         info_today: BundeslandInfo = bundesland[0]
         info_last_week: BundeslandInfo = bundesland[1]
@@ -72,6 +82,7 @@ def get_data_for_bundesland(update: Update, context: CallbackContext, postgres_d
     today: datetime.date = datetime.date(help.get_current_german_time())
     sql_kreis_cases_last_week = sql.get_kreiszahlen_of_bundesland(today - timedelta(days=7), today, bundesland)
     sql_kreis_cases_today = sql.get_kreiszahlen_of_bundesland(today, today, bundesland)
+
     # Get Results
     data_one_week_ago: List[KreisInformation] = postgres_db\
         .get(sql_kreis_cases_last_week)\
@@ -79,6 +90,7 @@ def get_data_for_bundesland(update: Update, context: CallbackContext, postgres_d
     data_today: List[KreisInformation] = postgres_db\
         .get(sql_kreis_cases_today)\
         .convert_rows_to(KreisInformation)
+
     # Construct Message
     combined_info: List[Tuple[KreisInformation, KreisInformation]] = list(zip(data_today, data_one_week_ago))
     markdown = f"*{bundesland}*:\n"
@@ -93,20 +105,46 @@ def get_data_for_bundesland(update: Update, context: CallbackContext, postgres_d
 def get_data_for_kreis(update: Update, context: CallbackContext, postgres_db: PostgresDatabase, kreis: str):
     # Define Query
     sql_kreis_cases = sql.get_history_for_kreis(kreis)
+
     # Get Results
-    kreis_cases_history: List[KreisInformation] = postgres_db\
+    kreis_cases_history: List[Tuple[Kreis, Fallzahl]] = postgres_db\
         .get(sql_kreis_cases)\
-        .convert_rows_to(KreisInformation)
+        .convert_to_two_types(Kreis, Fallzahl)
+
     # Construct Message
     markdown = f"*{help.escape_markdown_chars(kreis)}*:\n"
     markdown += "*Last Seven Days:* "
-    for kreis_history in kreis_cases_history[1:8]:
-        markdown += f"{kreis_history.number_of_new_cases}-"
+    for kreis, case_number in kreis_cases_history[1:8]:
+        markdown += f"{case_number.number_of_new_cases}-"
+    case_number_sum: int = sum([case_number.number_of_new_cases for kreis, case_number in kreis_cases_history[1:8]])
     markdown = markdown[:-1]
     markdown += "\n"
     markdown += "*Average*: "
-    markdown += f"{round(sum([kreis.number_of_new_cases for kreis in kreis_cases_history[1:8]])/7, 2)} \n"
-    markdown += f"*Link:* [{help.escape_markdown_chars(kreis_cases_history[0].kreis)}]({help.escape_markdown_chars(kreis_cases_history[0].link)})"
+    markdown += f"{round(case_number_sum/7, 2)} \n"
+    markdown += f"*7-Day Incidence*: {round(case_number_sum / kreis_cases_history[0][0].population * 100_000, 2)} per 100.000 \n"
+    markdown += f"*Link:* [{help.escape_markdown_chars(kreis_cases_history[0][0].kreis)}]({help.escape_markdown_chars(kreis_cases_history[0][1].link)})"
+    update.message.reply_markdown_v2(help.escape_unnormal_markdown_chars(markdown))
+
+
+@dataclass
+class Risikogebiet:
+    seven_day_incidence: int
+    kreis: str
+
+def get_risikogebiete(update: Update, context: CallbackContext, postgres_db: PostgresDatabase):
+    # Get Data
+    today: datetime.date = datetime.date(help.get_current_german_time())
+    last_week: datetime.date = today - timedelta(days=7)
+    sql_to_get_risikogebiete: Composed = sql.get_risikogebiete(today=today, last_week=last_week)
+    risikogebiete: List[Risikogebiet] = postgres_db\
+        .get(sql_to_get_risikogebiete)\
+        .convert_rows_to(Risikogebiet)
+
+    # Construct Message
+    markdown: str = f"Here are the risky areas of Germany. There are in total *{len(risikogebiete)}* of such areas. Incidence per 100k: \n \n"
+    for risikogebiet in risikogebiete:
+        kreis_name = help.escape_markdown_chars(create_kreis_command(risikogebiet.kreis))
+        markdown += f"*/{kreis_name}*: {risikogebiet.seven_day_incidence} \n"
     update.message.reply_markdown_v2(help.escape_unnormal_markdown_chars(markdown))
 
 
@@ -182,14 +220,15 @@ postgres_db: PostgresDatabase = PostgresDatabase(DATABASE_URL)
 postgres_db.initialize_tables(DATABASE_URL, get_table_metadata())
 
 # Schedule Updates and Deletes (Deletes are neccessary for Heroku)
-update_database_thread = threading.Thread(target=lambda: update_data_periodically(postgres_db, API_KEY))
+update_database_thread = threading.Thread(target=lambda: update_data_periodically(PostgresDatabase(DATABASE_URL), API_KEY))
 update_database_thread.start()
-delete_database_thread = threading.Thread(target=lambda: delete_data_periodically(postgres_db))
+delete_database_thread = threading.Thread(target=lambda: delete_data_periodically(PostgresDatabase(DATABASE_URL)))
 delete_database_thread.start()
 
 # Schedule Notifications
+users_to_notify: List[str] = get_users_to_notifiy(postgres_db)
 updater: Updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
-for user in get_users_to_notifiy(postgres_db):
+for user in users_to_notify:
     time_where_notifications_get_send: Time = Time(hour=20, tzinfo=timezone.utc)
     updater.job_queue.run_daily(lambda context: notify_user(context, postgres_db),time_where_notifications_get_send, context=user)
 
@@ -198,6 +237,7 @@ dispatcher: Dispatcher = updater.dispatcher
 dispatcher.add_handler(CommandHandler("update", lambda update, context: post_summary(update, context, postgres_db)))
 dispatcher.add_handler(CommandHandler("start", lambda update, context: start_notifications(update, context, postgres_db)))
 dispatcher.add_handler(CommandHandler("stop", stop_notifications))
+dispatcher.add_handler(CommandHandler("risikogebiete", lambda update, context: get_risikogebiete(update, context, postgres_db)))
 for bundesland in risklayer.get_all_bundeslaender(postgres_db):
     bundesland_command: str = create_bundesland_command(bundesland)
     callback_function = lambda update, context, bundesland=bundesland: \

@@ -89,10 +89,11 @@ class PostgresDatabase:
     def __init__(self, database_url: str):
         self._connection: Connection = psycopg2.connect(database_url)
         self._cursor: Cursor = self._connection.cursor()
+        self._database_url: str = database_url
 
-    def initialize_tables(self, database_url: str, base:DeclarativeMeta):
+    def initialize_tables(self, database_url: str, metadata:MetaData):
         engine = create_engine(database_url)
-        base.metadata.create_all(engine)
+        metadata.create_all(engine)
 
     def get_table_names(self) -> List[str]:
         self._cursor.execute("""SELECT table_name FROM information_schema.tables
@@ -145,6 +146,10 @@ class PostgresDatabase:
             entry: Dict = dict(zip(columnnames, result))
             results.append(entry)
         return DbResult(results)
+
+    def getAll(self, table_name: str) -> DbResult:
+        sql: Composable = SQL("SELECT * FROM {table_name}").format(table_name=Identifier(table_name))
+        return self.get(sql)
 
     def convert_to_db_entry(self, data: List[T], table_name: str) -> DbEntry:
         column_names: List[str] = self.get_column_names(table_name)
