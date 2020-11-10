@@ -190,7 +190,7 @@ def update_data(database: PostgresDatabase, api_key: str):
     database.convert_to_db_entry(kreis_infos, "fallzahlen").upsert()
 
 def delete_data(database: PostgresDatabase):
-    date_to_delete_everything_before: datetime.date = help.get_current_german_time() - timedelta(days=14)
+    date_to_delete_everything_before: datetime.date = datetime.date(help.get_current_german_time() - timedelta(days=28))
     sql_to_delete_fallzahlen: Composed = sql.delete_all_from_before(date_to_delete_everything_before)
     database.execute(sql_to_delete_fallzahlen)
 

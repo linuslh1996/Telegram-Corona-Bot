@@ -108,6 +108,7 @@ class PostgresDatabase:
 
     def execute(self, sql: Composable):
         self._cursor.execute(sql)
+        self._connection.commit()
 
     def insert(self, table_name: str, data: List[Dict[str, Any]]):
         keys: List[str] = list(data[0].keys())
