@@ -6,6 +6,7 @@ from typing import List, Tuple
 
 import os
 
+import pytz
 from psycopg2.sql import SQL, Literal, Composed
 from telegram import Update
 from data_modules import helper_functions as help, risklayer, sql
@@ -37,6 +38,7 @@ def post_summary(update: Update, context: CallbackContext, postgres_db: Postgres
 def notify_user(context: CallbackContext, postgres_db: PostgresDatabase):
     message_markdown: str = get_summarized_case_number(postgres_db)
     context.bot.send_message(chat_id=context.job.context, text=message_markdown, parse_mode="MarkdownV2")
+    time.sleep(5)
 
 
 def get_summarized_case_number(postgres_db: PostgresDatabase) -> str:
@@ -229,10 +231,10 @@ delete_database_thread.start()
 users_to_notify: List[str] = get_users_to_notifiy(postgres_db)
 updater: Updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
 for user in users_to_notify:
-    time_where_notifications_get_send: Time = Time(hour=20, tzinfo=timezone.utc)
+    time_where_notifications_get_send: Time = Time(hour=21, minute=00, tzinfo=pytz.timezone('Europe/Berlin'))
     updater.job_queue.run_daily(lambda context: notify_user(context, postgres_db),time_where_notifications_get_send, context=user)
 
-# Register Functions To Dispatcher
+#Register Functions To Dispatcher
 dispatcher: Dispatcher = updater.dispatcher
 dispatcher.add_handler(CommandHandler("update", lambda update, context: post_summary(update, context, postgres_db)))
 dispatcher.add_handler(CommandHandler("start", lambda update, context: start_notifications(update, context, postgres_db)))
