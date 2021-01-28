@@ -232,7 +232,7 @@ users_to_notify: List[str] = get_users_to_notifiy(postgres_db)
 updater: Updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
 for user in users_to_notify:
     time_where_notifications_get_send: Time = Time(hour=21, minute=00, tzinfo=pytz.timezone('Europe/Berlin'))
-    updater.job_queue.run_daily(lambda context: notify_user(context, postgres_db),time_where_notifications_get_send, context=user)
+    updater.job_queue.run_daily(lambda context: notify_user(context, PostgresDatabase(DATABASE_URL)),time_where_notifications_get_send, context=user)
 
 #Register Functions To Dispatcher
 dispatcher: Dispatcher = updater.dispatcher
