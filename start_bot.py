@@ -38,7 +38,6 @@ def post_summary(update: Update, context: CallbackContext, postgres_db: Postgres
 def notify_user(context: CallbackContext, postgres_db: PostgresDatabase):
     message_markdown: str = get_summarized_case_number(postgres_db)
     context.bot.send_message(chat_id=context.job.context, text=message_markdown, parse_mode="MarkdownV2")
-    time.sleep(5)
 
 
 def get_summarized_case_number(postgres_db: PostgresDatabase) -> str:
