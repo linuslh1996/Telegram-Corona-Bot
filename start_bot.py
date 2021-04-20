@@ -1,15 +1,15 @@
 import sched
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta, time as Time, timezone
+from datetime import datetime, timedelta, time as Time
 from typing import List, Tuple
 
 import os
 
 import pytz
-from psycopg2.sql import SQL, Literal, Composed
+from psycopg2.sql import SQL, Composed
 from telegram import Update
-from data_modules import helper_functions as help, risklayer, sql
+from data_modules import helper_functions as help, sql, risklayer
 
 from data_modules.database import PostgresDatabase
 from telegram.ext import Updater, Dispatcher, CommandHandler, CallbackContext
@@ -221,8 +221,6 @@ postgres_db: PostgresDatabase = PostgresDatabase(DATABASE_URL)
 postgres_db.initialize_tables(DATABASE_URL, get_table_metadata())
 
 # Schedule Updates and Deletes (Deletes are neccessary for Heroku)
-update_database_thread = threading.Thread(target=lambda: update_data_periodically(PostgresDatabase(DATABASE_URL), API_KEY))
-update_database_thread.start()
 delete_database_thread = threading.Thread(target=lambda: delete_data_periodically(PostgresDatabase(DATABASE_URL)))
 delete_database_thread.start()
 
@@ -251,6 +249,8 @@ for kreis in risklayer.get_all_kreise(postgres_db):
     dispatcher.add_handler(CommandHandler(kreis_command, callback_function))
 
 updater.start_polling()
+
+update_data_periodically(PostgresDatabase(DATABASE_URL), API_KEY)
 
 
 
