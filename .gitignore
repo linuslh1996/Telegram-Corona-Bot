@@ -5,3 +5,4 @@ __pycache__/
 alembic.ini
 start_server.sh
 .vscode/
+geckodriver.log
