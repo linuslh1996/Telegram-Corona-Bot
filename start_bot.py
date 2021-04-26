@@ -18,6 +18,8 @@ import threading
 
 from data_modules.scheme import *
 
+DAYS_BACK: int = 14
+
 
 @dataclass
 class BundeslandInfo:
@@ -43,9 +45,9 @@ def notify_user(context: CallbackContext, postgres_db: PostgresDatabase):
 def get_summarized_case_number(postgres_db: PostgresDatabase) -> str:
     # Prepare Query
     today: datetime.date = datetime.date(help.get_current_german_time())
-    sql_to_get_data_of_last_week: Composed = sql.get_bundesland_cases_on_date(today - timedelta(days=7), today)
+    sql_to_get_data_of_last_week: Composed = sql.get_bundesland_cases_on_date(today - timedelta(days=DAYS_BACK), today)
     sql_to_get_data_of_today: Composed = sql.get_bundesland_cases_on_date(today, today)
-    sql_to_get_cases_of_last_week: Composed = sql.get_case_number_on_data(today - timedelta(days=7))
+    sql_to_get_cases_of_last_week: Composed = sql.get_case_number_on_data(today - timedelta(days=DAYS_BACK))
 
     # Get Results
     data_one_week_ago: List[BundeslandInfo] = postgres_db\
@@ -81,7 +83,7 @@ def get_summarized_case_number(postgres_db: PostgresDatabase) -> str:
 def get_data_for_bundesland(update: Update, context: CallbackContext, postgres_db: PostgresDatabase, bundesland: str):
     # Define Query
     today: datetime.date = datetime.date(help.get_current_german_time())
-    sql_kreis_cases_last_week = sql.get_kreiszahlen_of_bundesland(today - timedelta(days=7), today, bundesland)
+    sql_kreis_cases_last_week = sql.get_kreiszahlen_of_bundesland(today - timedelta(days=DAYS_BACK), today, bundesland)
     sql_kreis_cases_today = sql.get_kreiszahlen_of_bundesland(today, today, bundesland)
 
     # Get Results

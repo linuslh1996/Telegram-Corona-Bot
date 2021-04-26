@@ -61,13 +61,16 @@ def _get_from_scraping() -> Tuple[List[List[str]], List[List[str]], List[List[st
     options.headless = True
     URL: str = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTB9XnOufMUQ4Plp6JWi2UAoND8jvBH2oH_vPQGIw5btYHqnSXxeVnpCz-1cwgjNpI48tqDgs51kO7n/pubhtml#"
     driver: webdriver.Firefox = webdriver.Firefox(options=options)
+    driver.set_page_load_timeout(30)
     driver.get(URL)
+    html: str  = driver.page_source
+    driver.quit()
+
 
     # Init BeautifulSoup
-    html_page: BeautifulSoup = BeautifulSoup(driver.page_source)
+    html_page: BeautifulSoup = BeautifulSoup(html)
     all_rows: ResultSet = html_page.findAll("tr")
     only_valid_rows = [row for row in all_rows if _is_valid_row(row)]
-    driver.quit()
 
     # Push Results
     kreis_names_raw: List[List[str]] = []
