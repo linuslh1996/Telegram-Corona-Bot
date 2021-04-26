@@ -63,10 +63,11 @@ def _get_from_scraping() -> Tuple[List[List[str]], List[List[str]], List[List[st
     driver: webdriver.Firefox = webdriver.Firefox(options=options)
     driver.get(URL)
 
-    # Init BS
+    # Init BeautifulSoup
     html_page: BeautifulSoup = BeautifulSoup(driver.page_source)
     all_rows: ResultSet = html_page.findAll("tr")
     only_valid_rows = [row for row in all_rows if _is_valid_row(row)]
+    driver.quit()
 
     # Push Results
     kreis_names_raw: List[List[str]] = []
@@ -90,7 +91,9 @@ def _is_valid_row(row) -> bool:
     return True
 
 def _preprocess_raw_data(kreis_names_raw: List[List[str]], new_cases_today_raw: List[List[str]], contributors_raw: List[List[str]], links_raw: List[List[str]]) -> List[KreisInformation]:
-    new_cases_today: List[int] = [int(case_number[0].replace(" ", "")) for case_number in new_cases_today_raw]
+    new_cases_today: List[int] = [int(case_number[0].replace(" ", "")) if case_number[0] != "" 
+                                        else 0 
+                                        for case_number in new_cases_today_raw ]
     kreis_names: List[str] = [kreis_name[0] for kreis_name in kreis_names_raw]
     links: List[str] = [link[0] for link in links_raw]
     kreis_is_already_entered: List[bool] = [len(contributor) != 0 and not "Vorläufig" in contributor
