@@ -61,11 +61,9 @@ def _get_from_scraping() -> Tuple[List[List[str]], List[List[str]], List[List[st
     options.headless = True
     URL: str = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTB9XnOufMUQ4Plp6JWi2UAoND8jvBH2oH_vPQGIw5btYHqnSXxeVnpCz-1cwgjNpI48tqDgs51kO7n/pubhtml#"
     driver: webdriver.Firefox = webdriver.Firefox(options=options)
-    driver.set_page_load_timeout(30)
     driver.get(URL)
     html: str  = driver.page_source
     driver.quit()
-
 
     # Init BeautifulSoup
     html_page: BeautifulSoup = BeautifulSoup(html)

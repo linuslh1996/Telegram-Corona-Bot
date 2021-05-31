@@ -18,7 +18,7 @@ import threading
 
 from data_modules.scheme import *
 
-DAYS_BACK: int = 14
+DAYS_BACK: int = 7
 
 
 @dataclass
