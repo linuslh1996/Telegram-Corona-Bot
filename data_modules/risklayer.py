@@ -26,7 +26,7 @@ class KreisInformation:
     date: datetime.date
 
 def get_new_data(api_key: str) -> List[KreisInformation]:
-    kreis_names_raw, new_cases_today_raw, contributors_raw, links_raw = _get_from_scraping()
+    kreis_names_raw, new_cases_today_raw, contributors_raw, links_raw = _get_from_API(api_key)
     kreis_infos: List[KreisInformation] = _preprocess_raw_data(kreis_names_raw, new_cases_today_raw, contributors_raw, links_raw)
     return kreis_infos
 
